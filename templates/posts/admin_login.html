@@ -1,0 +1,9 @@
+{% extends 'posts/base.html' %}
+{% block content %}
+<h1>Admin login</h1>
+<form method="post" autocomplete="off">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit">Continue</button>
+</form>
+{% endblock %}

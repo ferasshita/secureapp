@@ -1,0 +1,12 @@
+{% extends 'posts/base.html' %}
+{% block content %}
+<h1>{{ object.name }}</h1>
+<p>{{ object.description }}</p>
+<img src="{% url 'posts:media' object.image_filename %}" alt="post image" width="300" />
+{% if object.owner == request.user %}
+  <form method="post" action="{% url 'posts:post_delete' object.pk %}">
+    {% csrf_token %}
+    <button type="submit">Delete</button>
+  </form>
+{% endif %}
+{% endblock %}

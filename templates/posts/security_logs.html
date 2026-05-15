@@ -1,0 +1,6 @@
+{% extends 'posts/base.html' %}
+{% block content %}
+<h1>Recent security logs</h1>
+<pre>{% for line in lines %}{{ line }}
+{% endfor %}</pre>
+{% endblock %}

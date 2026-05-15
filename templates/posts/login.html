@@ -1,0 +1,11 @@
+{% extends 'posts/base.html' %}
+{% block content %}
+<h1>Login</h1>
+<form method="post" autocomplete="off">
+  {% csrf_token %}
+  <input type="hidden" name="next" value="{{ request.GET.next }}" />
+  {{ form.as_p }}
+  <button type="submit">Continue</button>
+</form>
+<a href="{% url 'posts:password_reset' %}">Forgot password?</a>
+{% endblock %}

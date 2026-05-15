@@ -1,0 +1,9 @@
+{% extends 'posts/base.html' %}
+{% block content %}
+<h1>Create post</h1>
+<form method="post" enctype="multipart/form-data" autocomplete="off">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit">Save</button>
+</form>
+{% endblock %}

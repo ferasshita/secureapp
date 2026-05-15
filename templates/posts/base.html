@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Secure App</title>
+</head>
+<body>
+  <nav>
+    {% if request.user.is_authenticated %}
+      <a href="{% url 'posts:home' %}">Home</a> |
+      <a href="{% url 'posts:post_create' %}">Create Post</a> |
+      <a href="{% url 'posts:settings' %}">Settings</a> |
+      <a href="{% url 'posts:logout' %}">Logout</a>
+    {% else %}
+      <a href="{% url 'posts:login' %}">Login</a> |
+      <a href="{% url 'posts:register' %}">Register</a>
+    {% endif %}
+  </nav>
+
+  {% for message in messages %}
+    <p>{{ message }}</p>
+  {% endfor %}
+
+  {% block content %}{% endblock %}
+</body>
+</html>
