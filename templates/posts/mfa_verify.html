@@ -1,0 +1,43 @@
+{% extends 'posts/base.html' %}
+{% block content %}
+{% load static %}
+<h1>Passkey verification</h1>
+<p>Use your registered passkey to complete sign-in.</p>
+<button id="verify-passkey" type="button">Verify with passkey</button>
+<pre id="error"></pre>
+<script src="{% static 'posts/webauthn.js' %}"></script>
+<script>
+document.getElementById('verify-passkey').addEventListener('click', async () => {
+  try {
+    const optionsResp = await fetch('{% url "posts:mfa_auth_options" %}', {credentials: 'same-origin'});
+    const options = await optionsResp.json();
+    options.challenge = decodeBase64url(options.challenge);
+    options.allowCredentials = (options.allowCredentials || []).map(c => ({...c, id: decodeBase64url(c.id)}));
+    const cred = await navigator.credentials.get({publicKey: options});
+    const payload = {
+      id: cred.id,
+      rawId: encodeBase64url(cred.rawId),
+      type: cred.type,
+      response: {
+        authenticatorData: encodeBase64url(cred.response.authenticatorData),
+        clientDataJSON: encodeBase64url(cred.response.clientDataJSON),
+        signature: encodeBase64url(cred.response.signature),
+        userHandle: cred.response.userHandle ? encodeBase64url(cred.response.userHandle) : null,
+      },
+      clientExtensionResults: cred.getClientExtensionResults(),
+    };
+    const verifyResp = await fetch('{% url "posts:mfa_auth_verify" %}', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
+      body: JSON.stringify(payload),
+    });
+    const data = await verifyResp.json();
+    if (!data.ok) throw new Error(data.error || 'Verification failed');
+    window.location.href = data.redirect;
+  } catch (error) {
+    document.getElementById('error').textContent = error.message;
+  }
+});
+</script>
+{% endblock %}

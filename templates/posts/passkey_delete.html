@@ -1,0 +1,10 @@
+{% extends 'posts/base.html' %}
+{% block content %}
+<h1>Delete passkey</h1>
+<p>To remove {{ credential.name }}, re-enter your password.</p>
+<form method="post" autocomplete="off">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit">Delete passkey</button>
+</form>
+{% endblock %}

@@ -1,0 +1,64 @@
+{% extends 'posts/base.html' %}
+{% block content %}
+{% load static %}
+<h1>Settings</h1>
+<p>{{ lost_key_note }}</p>
+
+<h2>Email</h2>
+<form method="post" autocomplete="off">
+  {% csrf_token %}
+  {{ email_form.as_p }}
+  <button type="submit">Update email</button>
+</form>
+
+<h2>Password</h2>
+<a href="{% url 'posts:password_change' %}">Change password</a>
+
+<h2>Passkeys</h2>
+<ul>
+  {% for key in passkeys %}
+    <li>{{ key.name }} ({{ key.created_at }})
+      <a href="{% url 'posts:passkey_delete' key.id %}">Delete</a>
+    </li>
+  {% empty %}
+    <li>No passkeys registered.</li>
+  {% endfor %}
+</ul>
+<button id="register-passkey" type="button">Add passkey</button>
+<pre id="passkey-error"></pre>
+
+<script src="{% static 'posts/webauthn.js' %}"></script>
+<script>
+document.getElementById('register-passkey').addEventListener('click', async () => {
+  try {
+    const optionsResp = await fetch('{% url "posts:passkey_register_options" %}', {credentials: 'same-origin'});
+    const options = await optionsResp.json();
+    options.challenge = decodeBase64url(options.challenge);
+    options.user.id = decodeBase64url(options.user.id);
+    options.excludeCredentials = (options.excludeCredentials || []).map(c => ({...c, id: decodeBase64url(c.id)}));
+    const cred = await navigator.credentials.create({publicKey: options});
+    const payload = {
+      id: cred.id,
+      rawId: encodeBase64url(cred.rawId),
+      type: cred.type,
+      response: {
+        attestationObject: encodeBase64url(cred.response.attestationObject),
+        clientDataJSON: encodeBase64url(cred.response.clientDataJSON),
+      },
+      clientExtensionResults: cred.getClientExtensionResults(),
+    };
+    const verifyResp = await fetch('{% url "posts:passkey_register_verify" %}', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
+      body: JSON.stringify(payload),
+    });
+    const data = await verifyResp.json();
+    if (!data.ok) throw new Error(data.error || 'Registration failed');
+    window.location.reload();
+  } catch (error) {
+    document.getElementById('passkey-error').textContent = error.message;
+  }
+});
+</script>
+{% endblock %}
