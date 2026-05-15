@@ -123,7 +123,8 @@ LOGIN_REDIRECT_URL = "posts:home"
 LOGOUT_REDIRECT_URL = "posts:login"
 
 # SECURITY: Admin URL is non-default to reduce automated attack noise.
-ADMIN_URL_PATH = os.environ.get("DJANGO_ADMIN_URL", "secure-admin/").lstrip("/")
+_raw_admin_path = os.environ.get("DJANGO_ADMIN_URL", "secure-admin/")
+ADMIN_URL_PATH = _raw_admin_path.strip("/") + "/"
 
 # SECURITY: Apply explicit CSP policy aligned with OWASP XSS mitigation guidance.
 CSP_DEFAULT_SRC = ("'self'",)
@@ -138,7 +139,7 @@ CSP_UPGRADE_INSECURE_REQUESTS = True
 # SECURITY: Axes lockout for authentication failures.
 AXES_ENABLED = True
 AXES_FAILURE_LIMIT = 5
-AXES_COOLOFF_TIME = 0.25  # 15 minutes.
+AXES_COOLOFF_TIME = 0.25  # 0.25 hours (15 minutes).
 AXES_LOCKOUT_PARAMETERS = ["username", "ip_address"]
 AXES_RESET_ON_SUCCESS = True
 
@@ -149,7 +150,7 @@ AUTHENTICATION_BACKENDS = [
 
 # SECURITY: Relying party settings for passkeys/WebAuthn ceremony validation.
 WEBAUTHN_RP_ID = os.environ.get("WEBAUTHN_RP_ID", "localhost")
-WEBAUTHN_RP_NAME = os.environ.get("WEBAUTHN_RP_NAME", "Secure College App")
+WEBAUTHN_RP_NAME = os.environ.get("WEBAUTHN_RP_NAME", "Secure App")
 WEBAUTHN_ORIGIN = os.environ.get("WEBAUTHN_ORIGIN", "https://localhost")
 
 # SECURITY: Dedicated audit log file; keep sensitive data out of log payloads.

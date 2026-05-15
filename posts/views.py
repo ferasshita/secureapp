@@ -44,6 +44,10 @@ def _require_verified_mfa(request: HttpRequest):
         raise PermissionDenied("MFA required.")
 
 
+def _credential_id_descriptors(user):
+    return [{"id": item["credential_id"], "type": "public-key"} for item in user.passkeys.values("credential_id")]
+
+
 @csrf_protect
 @ratelimit(key="ip", rate="5/15m", method="POST", block=False)
 def login_view(request: HttpRequest) -> HttpResponse:
@@ -120,7 +124,7 @@ def mfa_verify_view(request: HttpRequest) -> HttpResponse:
 def mfa_auth_options(request: HttpRequest) -> JsonResponse:
     challenge = base64.urlsafe_b64encode(os.urandom(32)).decode("ascii")
     request.session["webauthn_auth_challenge"] = challenge
-    allow_credentials = [{"id": item.credential_id, "type": "public-key"} for item in request.user.passkeys.all()]
+    allow_credentials = _credential_id_descriptors(request.user)
     # SECURITY: challenge is generated server-side and stored in session to prevent replay.
     return JsonResponse(
         {
@@ -165,11 +169,13 @@ def mfa_auth_verify(request: HttpRequest) -> JsonResponse:
 @login_required
 @require_GET
 def passkey_register_options(request: HttpRequest) -> JsonResponse:
-    _require_verified_mfa(request)
+    # SECURITY: bootstrap exception allows first key enrollment after password auth.
+    if request.user.passkeys.exists():
+        _require_verified_mfa(request)
     challenge = base64.urlsafe_b64encode(os.urandom(32)).decode("ascii")
     request.session["webauthn_register_challenge"] = challenge
 
-    exclude_credentials = [{"id": item.credential_id, "type": "public-key"} for item in request.user.passkeys.all()]
+    exclude_credentials = _credential_id_descriptors(request.user)
     return JsonResponse(
         {
             "challenge": challenge,
@@ -190,7 +196,9 @@ def passkey_register_options(request: HttpRequest) -> JsonResponse:
 @login_required
 @require_POST
 def passkey_register_verify(request: HttpRequest) -> JsonResponse:
-    _require_verified_mfa(request)
+    # SECURITY: bootstrap exception allows first key enrollment after password auth.
+    if request.user.passkeys.exists():
+        _require_verified_mfa(request)
     challenge = request.session.get("webauthn_register_challenge")
     if not challenge:
         return JsonResponse({"ok": False, "error": "Session expired."}, status=400)

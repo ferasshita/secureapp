@@ -28,6 +28,14 @@ class AuthFlowTests(TestCase):
         response = self.client.get(reverse("posts:home"))
         self.assertRedirects(response, reverse("posts:settings"))
 
+    def test_first_passkey_options_allowed_without_prior_mfa(self):
+        self.client.force_login(self.user)
+        session = self.client.session
+        session["mfa_verified"] = False
+        session.save()
+        response = self.client.get(reverse("posts:passkey_register_options"))
+        self.assertEqual(response.status_code, 200)
+
 
 class PostSecurityTests(TestCase):
     def setUp(self):
@@ -65,3 +73,13 @@ class InputValidationTests(TestCase):
             {"name": "<bad>", "description": "ok", "image": self._jpeg()},
         )
         self.assertContains(response, "invalid characters", status_code=200)
+
+    def test_settings_email_update(self):
+        self.client.force_login(self.user)
+        session = self.client.session
+        session["mfa_verified"] = True
+        session.save()
+        response = self.client.post(reverse("posts:settings"), {"email": "new@example.com"})
+        self.assertRedirects(response, reverse("posts:settings"))
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, "new@example.com")
