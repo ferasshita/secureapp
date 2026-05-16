@@ -9,7 +9,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "unsafe-dev-key-change-me")
 
 # SECURITY: Debug is off by default to avoid verbose error pages and info leaks.
-DEBUG = False
+# Show detailed error pages during local development (runserver) and tests by default.
+# In production, set DJANGO_DEBUG=0 to disable DEBUG.
+_DEBUG_DEFAULT = "1" if ("test" in sys.argv or any(arg.startswith("runserver") for arg in sys.argv)) else "0"
+DEBUG = os.environ.get("DJANGO_DEBUG", _DEBUG_DEFAULT) == "1"
 
 ALLOWED_HOSTS = [h.strip() for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",") if h.strip()]
 
@@ -90,6 +93,8 @@ USE_TZ = True
 
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+# During development, also load static files from the project-level "static" directory.
+STATICFILES_DIRS = [BASE_DIR / "static"]
 
 # SECURITY: User uploads are private and served only through an authorization-aware view.
 PROTECTED_MEDIA_ROOT = BASE_DIR / "media_protected"
@@ -98,9 +103,16 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # SECURITY: HTTPS/session cookie hardening.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SECURE_SSL_REDIRECT", "0" if "test" in sys.argv else "1") == "1"
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
+# Allow HTTP during local development (`runserver`) and tests unless explicitly overridden.
+_is_runserver = any(arg.startswith("runserver") for arg in sys.argv)
+_default_ssl_redirect = "0" if ("test" in sys.argv or _is_runserver) else "1"
+SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SECURE_SSL_REDIRECT", _default_ssl_redirect) == "1"
+# In local development (runserver) and tests, allow HTTP by default so auth works without TLS.
+# Override with DJANGO_SESSION_COOKIE_SECURE/DJANGO_CSRF_COOKIE_SECURE=1 in production.
+_SESSION_SECURE_DEFAULT = "0" if ("test" in sys.argv or _is_runserver) else "1"
+SESSION_COOKIE_SECURE = os.environ.get("DJANGO_SESSION_COOKIE_SECURE", _SESSION_SECURE_DEFAULT) == "1"
+_CSRF_SECURE_DEFAULT = "0" if ("test" in sys.argv or _is_runserver) else "1"
+CSRF_COOKIE_SECURE = os.environ.get("DJANGO_CSRF_COOKIE_SECURE", _CSRF_SECURE_DEFAULT) == "1"
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
@@ -108,9 +120,12 @@ CSRF_USE_SESSIONS = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
-SECURE_HSTS_SECONDS = 63072000
-SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-SECURE_HSTS_PRELOAD = True
+# Disable HSTS automatically during local development (runserver) and tests
+# to prevent browsers from forcing HTTPS to the Django dev server.
+_default_hsts_seconds = "0" if ("test" in sys.argv or _is_runserver) else "63072000"
+SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_SECURE_HSTS_SECONDS", _default_hsts_seconds))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = (SECURE_HSTS_SECONDS > 0) and os.environ.get("DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS", "1") == "1"
+SECURE_HSTS_PRELOAD = (SECURE_HSTS_SECONDS > 0) and os.environ.get("DJANGO_SECURE_HSTS_PRELOAD", "1") == "1"
 
 # SECURITY: Session lifetime controls reduce risk from stolen session cookies.
 SESSION_SAVE_EVERY_REQUEST = True
@@ -134,7 +149,9 @@ CSP_STYLE_SRC = ("'self'", "'unsafe-inline'")
 CSP_OBJECT_SRC = ("'none'",)
 CSP_BASE_URI = ("'self'",)
 CSP_FORM_ACTION = ("'self'",)
-CSP_UPGRADE_INSECURE_REQUESTS = True
+# During local dev, do not force browsers to upgrade to HTTPS for subresources.
+_CSP_UPGRADE_DEFAULT = "0" if ("test" in sys.argv or _is_runserver) else "1"
+CSP_UPGRADE_INSECURE_REQUESTS = os.environ.get("DJANGO_CSP_UPGRADE_INSECURE_REQUESTS", _CSP_UPGRADE_DEFAULT) == "1"
 
 # SECURITY: Axes lockout for authentication failures.
 AXES_ENABLED = True
@@ -151,7 +168,7 @@ AUTHENTICATION_BACKENDS = [
 # SECURITY: Relying party settings for passkeys/WebAuthn ceremony validation.
 WEBAUTHN_RP_ID = os.environ.get("WEBAUTHN_RP_ID", "localhost")
 WEBAUTHN_RP_NAME = os.environ.get("WEBAUTHN_RP_NAME", "Secure App")
-WEBAUTHN_ORIGIN = os.environ.get("WEBAUTHN_ORIGIN", "https://localhost")
+WEBAUTHN_ORIGIN = os.environ.get("WEBAUTHN_ORIGIN", "http://localhost")
 
 # SECURITY: Dedicated audit log file; keep sensitive data out of log payloads.
 LOG_DIR = BASE_DIR / "logs"

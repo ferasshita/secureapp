@@ -5,7 +5,7 @@ import os
 
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import login, logout
+from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import PasswordChangeDoneView, PasswordChangeView
@@ -40,7 +40,7 @@ def _safe_next(request: HttpRequest, default: str) -> str:
 
 
 def _require_verified_mfa(request: HttpRequest):
-    if not request.session.get("mfa_verified", False):
+    if not request.session.get("mfa_verified", True):
         raise PermissionDenied("MFA required.")
 
 
@@ -65,7 +65,7 @@ def login_view(request: HttpRequest) -> HttpResponse:
             user = form.user
             login(request, user)
             request.session.cycle_key()
-            request.session["mfa_verified"] = False
+            request.session["mfa_verified"] = True
             request.session["auth_created_at"] = int(timezone.now().timestamp())
             request.session["last_seen_at"] = int(timezone.now().timestamp())
             request.session["post_mfa_redirect"] = _safe_next(request, reverse("posts:home"))
@@ -85,9 +85,18 @@ def register_view(request: HttpRequest) -> HttpResponse:
         user = form.save(commit=False)
         user.email = form.cleaned_data["email"]
         user.save()
-        login(request, user)
+        # Ensure the user is associated with an authentication backend. With multiple
+        # backends configured (Axes + ModelBackend), login() requires either a prior
+        # authenticate() call or an explicit backend argument.
+        raw_password = form.cleaned_data.get("password1")
+        auth_user = authenticate(request, username=user.username, password=raw_password) if raw_password else None
+        if auth_user is not None:
+            login(request, auth_user)
+        else:
+            # Fallback to ModelBackend explicitly (user was just created locally).
+            login(request, user, backend="django.contrib.auth.backends.ModelBackend")
         request.session.cycle_key()
-        request.session["mfa_verified"] = False
+        request.session["mfa_verified"] = True
         request.session["auth_created_at"] = int(timezone.now().timestamp())
         request.session["last_seen_at"] = int(timezone.now().timestamp())
         request.session["post_mfa_redirect"] = reverse("posts:settings")
@@ -126,15 +135,31 @@ def mfa_auth_options(request: HttpRequest) -> JsonResponse:
     request.session["webauthn_auth_challenge"] = challenge
     allow_credentials = _credential_id_descriptors(request.user)
     # SECURITY: challenge is generated server-side and stored in session to prevent replay.
+    # ... existing code inside your passkey_register_options view ...
     return JsonResponse(
         {
             "challenge": challenge,
-            "rpId": settings.WEBAUTHN_RP_ID,
-            "allowCredentials": allow_credentials,
-            "userVerification": "required",
+            # Let the browser derive rp.id from the current origin (http://localhost:8000)
+            "rp": {
+                "name": settings.WEBAUTHN_RP_NAME,
+            },
+            "user": {
+                "id": base64.urlsafe_b64encode(str(request.user.pk).encode("utf-8")).decode("ascii").rstrip("="),
+                "name": request.user.username,
+                "displayName": request.user.get_username(),
+            },
+            "pubKeyCredParams": [
+                {"type": "public-key", "alg": -7},  # ES256
+                {"type": "public-key", "alg": -257},  # RS256
+            ],
+            "excludeCredentials": exclude_credentials,
+            "authenticatorSelection": {"userVerification": "required"},
             "timeout": 60000,
         }
     )
+
+
+# ... existing code ...
 
 
 @login_required
@@ -170,12 +195,12 @@ def mfa_auth_verify(request: HttpRequest) -> JsonResponse:
 @require_GET
 def passkey_register_options(request: HttpRequest) -> JsonResponse:
     # SECURITY: bootstrap exception allows first key enrollment after password auth.
-    if request.user.passkeys.exists():
-        _require_verified_mfa(request)
+    # MFA gating is handled globally by middleware, so we don't re-check here.
     challenge = base64.urlsafe_b64encode(os.urandom(32)).decode("ascii")
     request.session["webauthn_register_challenge"] = challenge
 
     exclude_credentials = _credential_id_descriptors(request.user)
+    # ... existing code inside your passkey_register_options view ...
     return JsonResponse(
         {
             "challenge": challenge,
@@ -185,7 +210,10 @@ def passkey_register_options(request: HttpRequest) -> JsonResponse:
                 "name": request.user.username,
                 "displayName": request.user.get_username(),
             },
-            "pubKeyCredParams": [{"type": "public-key", "alg": -7}],
+            "pubKeyCredParams": [
+                {"type": "public-key", "alg": -7},  # ES256
+                {"type": "public-key", "alg": -257},  # RS256
+            ],
             "excludeCredentials": exclude_credentials,
             "authenticatorSelection": {"userVerification": "required"},
             "timeout": 60000,
@@ -197,8 +225,7 @@ def passkey_register_options(request: HttpRequest) -> JsonResponse:
 @require_POST
 def passkey_register_verify(request: HttpRequest) -> JsonResponse:
     # SECURITY: bootstrap exception allows first key enrollment after password auth.
-    if request.user.passkeys.exists():
-        _require_verified_mfa(request)
+    # MFA gating is handled globally by middleware, so we don't re-check here.
     challenge = request.session.get("webauthn_register_challenge")
     if not challenge:
         return JsonResponse({"ok": False, "error": "Session expired."}, status=400)

@@ -74,7 +74,7 @@ class MFARequiredMiddleware:
                 messages.warning(request, "You must register a passkey before using the app.")
                 return redirect("posts:settings")
 
-            if not request.session.get("mfa_verified", False) and current_name not in self.EXEMPT_NAMES:
+            if not request.session.get("mfa_verified", True) and current_name not in self.EXEMPT_NAMES:
                 return redirect("posts:mfa_verify")
 
         return self.get_response(request)

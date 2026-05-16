@@ -1,12 +1,13 @@
 {% extends 'posts/base.html' %}
-{% block content %}
 {% load static %}
+{% load csp %}
+{% block content %}
 <h1>Passkey verification</h1>
 <p>Use your registered passkey to complete sign-in.</p>
 <button id="verify-passkey" type="button">Verify with passkey</button>
 <pre id="error"></pre>
-<script src="{% static 'posts/webauthn.js' %}"></script>
-<script>
+<script nonce="{% csp_nonce %}" src="{% static 'posts/webauthn.js' %}"></script>
+<script nonce="{% csp_nonce %}">
 document.getElementById('verify-passkey').addEventListener('click', async () => {
   try {
     const optionsResp = await fetch('{% url "posts:mfa_auth_options" %}', {credentials: 'same-origin'});
